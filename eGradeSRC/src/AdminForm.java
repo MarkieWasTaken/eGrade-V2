@@ -6,6 +6,7 @@ import java.sql.*;
 import java.util.HashMap;
 import java.util.Map;
 import javax.swing.table.DefaultTableModel;
+import org.mindrot.jbcrypt.BCrypt;
 
 
 public class AdminForm extends JFrame {
@@ -417,37 +418,57 @@ public class AdminForm extends JFrame {
         }
 
         try {
+            String rawPassword = fn.toLowerCase() + "2024";
+            String hashedPassword = BCrypt.hashpw(rawPassword, BCrypt.gensalt());
+
             Connection conn = DatabaseManager.getConnection();
             PreparedStatement stmt = conn.prepareStatement("""
-                INSERT INTO "user" (first_name, last_name, email, phone, user_type_id, city_id)
-                VALUES (?, ?, ?, ?, 2, ?)
-                RETURNING id
-            """);
+            INSERT INTO "user" (first_name, last_name, email, password, phone, user_type_id, city_id)
+            VALUES (?, ?, ?, ?, ?, 2, ?)
+            RETURNING id
+        """);
             stmt.setString(1, fn);
             stmt.setString(2, ln);
             stmt.setString(3, email);
-            stmt.setString(4, phone);
-            stmt.setInt(5, cityId);
+            stmt.setString(4, hashedPassword);
+            stmt.setString(5, phone);
+            stmt.setInt(6, cityId);
             ResultSet rs = stmt.executeQuery();
 
             int studentId = -1;
             if (rs.next()) studentId = rs.getInt("id");
 
+            // 👇 Insert student classes
             PreparedStatement classStmt = conn.prepareStatement("""
-                INSERT INTO student_class (student_id, class_id)
-                SELECT ?, id FROM class WHERE grade_level_id = ?
-            """);
+            INSERT INTO student_class (student_id, class_id)
+            SELECT ?, id FROM class WHERE grade_level_id = ?
+        """);
             classStmt.setInt(1, studentId);
             classStmt.setInt(2, year);
             classStmt.executeUpdate();
 
-            JOptionPane.showMessageDialog(this, "Student created successfully.");
+            // ✅ INSERT SUBJECTS for the student
+            PreparedStatement subjectStmt = conn.prepareStatement("""
+            INSERT INTO student_subject (student_id, subject_id)
+            SELECT ?, subject_id FROM grade_level_subject
+            WHERE grade_level_id = ?
+        """);
+            subjectStmt.setInt(1, studentId);
+            subjectStmt.setInt(2, year);
+            subjectStmt.executeUpdate();
+
+            JOptionPane.showMessageDialog(this,
+                    "Student created successfully!\nPassword: " + rawPassword,
+                    "Success", JOptionPane.INFORMATION_MESSAGE);
+
             loadStudents();
         } catch (SQLException ex) {
             ex.printStackTrace();
             JOptionPane.showMessageDialog(this, "Failed to create student.");
         }
     }
+
+
 
     private void createParent(ActionEvent e) {
         String fn = parentFirstName.getText().trim();
@@ -465,16 +486,19 @@ public class AdminForm extends JFrame {
         }
 
         try {
+            String hashedPassword = BCrypt.hashpw(password, BCrypt.gensalt()); // ✅ Hash it!
+
             Connection conn = DatabaseManager.getConnection();
+
             PreparedStatement stmt = conn.prepareStatement("""
-                INSERT INTO "user" (first_name, last_name, email, password, phone, user_type_id, city_id)
-                VALUES (?, ?, ?, ?, ?, 1, ?)
-                RETURNING id
-            """);
+            INSERT INTO "user" (first_name, last_name, email, password, phone, user_type_id, city_id)
+            VALUES (?, ?, ?, ?, ?, 1, ?)
+            RETURNING id
+        """);
             stmt.setString(1, fn);
             stmt.setString(2, ln);
             stmt.setString(3, email);
-            stmt.setString(4, password);
+            stmt.setString(4, hashedPassword); // ✅ use it here
             stmt.setString(5, phone);
             stmt.setInt(6, cityId);
             ResultSet rs = stmt.executeQuery();
@@ -484,9 +508,9 @@ public class AdminForm extends JFrame {
 
             int studentId = studentMap.get(selectedStudent);
             PreparedStatement linkStmt = conn.prepareStatement("""
-                INSERT INTO parent_student (parent_id, student_id)
-                VALUES (?, ?)
-            """);
+            INSERT INTO parent_student (parent_id, student_id)
+            VALUES (?, ?)
+        """);
             linkStmt.setInt(1, parentId);
             linkStmt.setInt(2, studentId);
             linkStmt.executeUpdate();
@@ -499,6 +523,7 @@ public class AdminForm extends JFrame {
             JOptionPane.showMessageDialog(this, "Failed to create parent.");
         }
     }
+
 
     private void loadStudents() {
         studentMap.clear();

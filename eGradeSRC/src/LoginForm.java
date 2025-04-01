@@ -9,13 +9,12 @@ public class LoginForm extends JFrame {
     private JPasswordField passwordField;
 
     public LoginForm() {
-        setTitle("eGrade Parent Login");
+        setTitle("eGrade Login");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(850, 450);
         setLocationRelativeTo(null);
         setResizable(false);
         setLayout(new GridLayout(1, 2));
-
 
         JPanel leftPanel = new JPanel();
         leftPanel.setLayout(null);
@@ -26,7 +25,7 @@ public class LoginForm extends JFrame {
         welcomeLabel.setBounds(50, 40, 300, 30);
         leftPanel.add(welcomeLabel);
 
-        JLabel descLabel = new JLabel("Parent / Teacher Portal");
+        JLabel descLabel = new JLabel("Parent / Teacher / Admin Portal");
         descLabel.setFont(new Font("Segoe UI", Font.PLAIN, 16));
         descLabel.setBounds(50, 75, 300, 25);
         leftPanel.add(descLabel);
@@ -65,6 +64,7 @@ public class LoginForm extends JFrame {
             public void actionPerformed(ActionEvent e) {
                 String email = emailField.getText().trim();
                 String password = new String(passwordField.getPassword());
+
                 String userType = isValidCredentials(email, password);
 
                 if (userType == null) {
@@ -73,26 +73,19 @@ public class LoginForm extends JFrame {
                 } else {
                     statusLabel.setForeground(new Color(0, 128, 0));
                     statusLabel.setText("Login successful! 🎉");
-                    dispose();
 
                     int userId = DatabaseManager.loggedInUserId;
+                    dispose();
 
-                    if (userType.equalsIgnoreCase("parent")) {
-                        new ParentForm(userId);
-                        dispose();
-                    } else if (userType.equalsIgnoreCase("teacher")) {
-                        new TeacherForm(userId);
-                        dispose();
-                    } else if (userType.equalsIgnoreCase("admin")) {
-                        new AdminForm(userId);
-                        dispose();
-                    } else {
-                        JOptionPane.showMessageDialog(null, "Unknown user type: " + userType);
+                    switch (userType.toLowerCase()) {
+                        case "parent" -> new ParentForm(userId);
+                        case "teacher" -> new TeacherForm(userId);
+                        case "admin" -> new AdminForm(userId);
+                        default -> JOptionPane.showMessageDialog(null, "Unknown user type: " + userType);
                     }
                 }
             }
         });
-
 
         JPanel rightPanel = new JPanel(new BorderLayout());
         rightPanel.setBackground(new Color(245, 250, 255));
@@ -117,6 +110,6 @@ public class LoginForm extends JFrame {
     }
 
     private String isValidCredentials(String email, String password) {
-        return DatabaseManager.validateLogin(email, password);
+        return DatabaseManager.callLoginFunction(email, password);
     }
 }

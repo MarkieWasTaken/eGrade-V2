@@ -27,26 +27,20 @@ public class DatabaseManager {
 
     public static int loggedInUserId = -1;
 
-    public static String validateLogin(String email, String password) {
-        String query = """
-            SELECT u.id, ut.type_name
-            FROM "user" u
-            JOIN user_type ut ON u.user_type_id = ut.id
-            WHERE u.email = ? AND u.password = ?
-        """;
-
+    public static String callLoginFunction(String email, String password) {
+        String query = "SELECT * FROM validate_login(?, ?)";
         try (PreparedStatement stmt = connection.prepareStatement(query)) {
             stmt.setString(1, email);
             stmt.setString(2, password);
             ResultSet rs = stmt.executeQuery();
-
             if (rs.next()) {
-                loggedInUserId = rs.getInt("id");
-                return rs.getString("type_name");
+                loggedInUserId = rs.getInt("user_id");
+                return rs.getString("user_type");
             }
         } catch (SQLException e) {
             e.printStackTrace();
         }
         return null;
     }
+
 }
