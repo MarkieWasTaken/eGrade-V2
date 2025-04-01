@@ -55,6 +55,19 @@ public class ParentForm extends JFrame {
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
         add(scrollPane);
         setVisible(true);
+
+        JMenuBar menuBar = new JMenuBar();
+        JMenu accountMenu = new JMenu("Profile");
+        JMenuItem logoutItem = new JMenuItem("Log Out");
+
+        logoutItem.addActionListener(e -> {
+            dispose();
+            new LoginForm();
+        });
+
+        accountMenu.add(logoutItem);
+        menuBar.add(accountMenu);
+        setJMenuBar(menuBar);
     }
 
     static class GradeItem {

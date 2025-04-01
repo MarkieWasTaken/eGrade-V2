@@ -14,7 +14,7 @@ public class LoginForm extends JFrame {
         setSize(850, 450);
         setLocationRelativeTo(null);
         setResizable(false);
-        setLayout(new GridLayout(1, 2)); // Split screen
+        setLayout(new GridLayout(1, 2));
 
 
         JPanel leftPanel = new JPanel();
@@ -79,10 +79,13 @@ public class LoginForm extends JFrame {
 
                     if (userType.equalsIgnoreCase("parent")) {
                         new ParentForm(userId);
+                        dispose();
                     } else if (userType.equalsIgnoreCase("teacher")) {
                         new TeacherForm(userId);
+                        dispose();
                     } else if (userType.equalsIgnoreCase("admin")) {
                         new AdminForm(userId);
+                        dispose();
                     } else {
                         JOptionPane.showMessageDialog(null, "Unknown user type: " + userType);
                     }
@@ -114,6 +117,6 @@ public class LoginForm extends JFrame {
     }
 
     private String isValidCredentials(String email, String password) {
-        return DatabaseManager.validateLogin(email, password); // returns user_type or null
+        return DatabaseManager.validateLogin(email, password);
     }
 }

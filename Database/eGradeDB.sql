@@ -75,6 +75,18 @@ CREATE TABLE grade_level_subject (
   FOREIGN KEY (subject_id) REFERENCES subject(id)
 );
 
+CREATE TABLE grade_log (
+    id SERIAL PRIMARY KEY,
+    teacher_id INT NOT NULL,
+    student_id INT NOT NULL,
+    subject_id INT NOT NULL,
+    score DECIMAL NOT NULL,
+    comment VARCHAR,
+    date_given DATE NOT NULL,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
 
 ALTER TABLE "user" ADD FOREIGN KEY ("city_id") REFERENCES "city" ("id");
 

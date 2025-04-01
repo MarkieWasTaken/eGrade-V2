@@ -110,6 +110,20 @@ public class TeacherForm extends JFrame {
 
         loadSubjects();
         setVisible(true);
+
+        JMenuBar menuBar = new JMenuBar();
+        JMenu accountMenu = new JMenu("Profile");
+        JMenuItem logoutItem = new JMenuItem("Log Out");
+
+        logoutItem.addActionListener(e -> {
+            dispose();
+            new LoginForm(); // Return to login
+        });
+
+        accountMenu.add(logoutItem);
+        menuBar.add(accountMenu);
+        setJMenuBar(menuBar);
+
     }
 
     private void loadSubjects() {
@@ -200,15 +214,26 @@ public class TeacherForm extends JFrame {
             return;
         }
 
-        String sql = "INSERT INTO grade (student_id, subject_id, score, date, comment) VALUES (?, ?, ?, ?, ?)";
+        String sql = """
+    WITH ins AS (
+        INSERT INTO grade (student_id, subject_id, score, date, comment)
+        VALUES (?, ?, ?, ?, ?)
+        RETURNING student_id, subject_id, score, comment, date
+    )
+    INSERT INTO grade_log (teacher_id, student_id, subject_id, score, comment, date_given)
+    SELECT ?, student_id, subject_id, score, comment, date FROM ins
+""";
+
         try (PreparedStatement stmt = DatabaseManager.getConnection().prepareStatement(sql)) {
             stmt.setInt(1, studentId);
             stmt.setInt(2, subjectId);
             stmt.setInt(3, score);
             stmt.setDate(4, Date.valueOf(date));
             stmt.setString(5, comment);
+            stmt.setInt(6, teacherId);
+
             stmt.executeUpdate();
-            JOptionPane.showMessageDialog(this, "Grade added successfully.");
+            JOptionPane.showMessageDialog(this, "Grade added and logged successfully.");
             scoreField.setText("");
             commentField.setText("");
             dateField.setText("");
@@ -217,5 +242,9 @@ public class TeacherForm extends JFrame {
             JOptionPane.showMessageDialog(this, "Failed to insert grade.");
             e.printStackTrace();
         }
+
+
     }
+
+
 }

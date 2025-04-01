@@ -1,6 +1,7 @@
 public class Main {
     public static void main(String[] args) {
-        DatabaseManager.connect();  // Establish DB connection
+        DatabaseManager.connect();
         new LoginForm();
+
     }
 }
