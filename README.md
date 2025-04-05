@@ -45,4 +45,4 @@ After this, we connected our hosted database with our SUPB, DataGrip in this ins
 For Java, we used JetBrain's IDE; IntelliJ. Installing the Swing GUI plugin, which allows for form-like UI design, we first designed the base of the UI with everything required for it to work. When done, we started writing the code
 for the app to function, the SQL queries, UI handling, etc. After finishing, we put a final touch on the UI and the app was finished.
 
-It was a learning experience. There were many challenges in finding a server, troubleshooting for the IDE, coding the SQL queries and so forth. However, it was enjoyable because it was a team effort.
+It was a learning experience. There were many challenges in finding a server, troubleshooting for the IDE, coding the SQL queries and so forth. However, it was enjoyable because it was a team effort
