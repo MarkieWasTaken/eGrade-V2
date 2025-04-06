@@ -3,11 +3,17 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.*;
+import io.github.cdimascio.dotenv.Dotenv;
 
 public class DatabaseManager {
-    private static final String URL = "jdbc:postgresql://pg-28426f42-e-gradejava.c.aivencloud.com:24905/defaultdb?sslmode=require";
-    private static final String USER = "avnadmin";
-    private static final String PASSWORD = "AVNS_Zlomc5dK4BVOJnWDL66";
+
+    private static final Dotenv dotenv = Dotenv.load();
+
+    private static final String URL = dotenv.get("DB_URL");
+    private static final String USER = dotenv.get("DB_USER");
+    private static final String PASSWORD = dotenv.get("DB_PASSWORD");
+
     private static Connection connection;
 
     public static void connect() {
@@ -24,23 +30,26 @@ public class DatabaseManager {
         return connection;
     }
 
-
     public static int loggedInUserId = -1;
 
-    public static String callLoginFunction(String email, String password) {
+    public static String validateLogin(String email, String password) {
         String query = "SELECT * FROM validate_login(?, ?)";
-        try (PreparedStatement stmt = connection.prepareStatement(query)) {
+
+        try (PreparedStatement stmt = getConnection().prepareStatement(query)) {
             stmt.setString(1, email);
             stmt.setString(2, password);
+
             ResultSet rs = stmt.executeQuery();
+
             if (rs.next()) {
                 loggedInUserId = rs.getInt("user_id");
                 return rs.getString("user_type");
             }
+
         } catch (SQLException e) {
             e.printStackTrace();
         }
+
         return null;
     }
-
 }

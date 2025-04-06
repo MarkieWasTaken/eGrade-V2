@@ -110,6 +110,6 @@ public class LoginForm extends JFrame {
     }
 
     private String isValidCredentials(String email, String password) {
-        return DatabaseManager.callLoginFunction(email, password);
+        return DatabaseManager.validateLogin(email, password);
     }
 }

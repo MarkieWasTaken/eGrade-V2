@@ -129,20 +129,23 @@ public class TeacherForm extends JFrame {
     private void loadSubjects() {
         subjectMap.clear();
         subjectComboBox.removeAllItems();
-        try (PreparedStatement stmt = DatabaseManager.getConnection().prepareStatement(
-                "SELECT s.id, s.name FROM subject s JOIN teacher_subject ts ON s.id = ts.subject_id WHERE ts.teacher_id = ?"
-        )) {
+
+        String sql = "SELECT * FROM get_teacher_subjects(?)";
+
+        try (PreparedStatement stmt = DatabaseManager.getConnection().prepareStatement(sql)) {
             stmt.setInt(1, teacherId);
             ResultSet rs = stmt.executeQuery();
+
             while (rs.next()) {
-                String name = rs.getString("name");
                 int id = rs.getInt("id");
+                String name = rs.getString("name");
                 subjectMap.put(name, id);
                 subjectComboBox.addItem(name);
             }
         } catch (SQLException e) {
             e.printStackTrace();
         }
+
         if (subjectComboBox.getItemCount() > 0) {
             subjectComboBox.setSelectedIndex(0);
             loadStudentsAndGrades();
@@ -159,25 +162,14 @@ public class TeacherForm extends JFrame {
         if (selectedSubject == null) return;
         int subjectId = subjectMap.get(selectedSubject);
 
-        String query = """
-            SELECT u.id, u.first_name || ' ' || u.last_name AS full_name,
-                   COUNT(g.id) AS grade_count,
-                   COALESCE(ROUND(AVG(g.score), 2), 0) AS avg_grade
-            FROM student_subject ss
-            JOIN "user" u ON ss.student_id = u.id
-            LEFT JOIN grade g ON g.student_id = u.id AND g.subject_id = ?
-            WHERE ss.subject_id = ?
-            GROUP BY u.id
-            ORDER BY full_name;
-        """;
-
-        try (PreparedStatement stmt = DatabaseManager.getConnection().prepareStatement(query)) {
+        try (PreparedStatement stmt = DatabaseManager.getConnection().prepareStatement(
+                "SELECT * FROM get_students_with_grades(?)"
+        )) {
             stmt.setInt(1, subjectId);
-            stmt.setInt(2, subjectId);
             ResultSet rs = stmt.executeQuery();
 
             while (rs.next()) {
-                int studentId = rs.getInt("id");
+                int studentId = rs.getInt("student_id"); // ✅ match with function output
                 String name = rs.getString("full_name");
                 double avg = rs.getDouble("avg_grade");
                 int count = rs.getInt("grade_count");
@@ -214,37 +206,41 @@ public class TeacherForm extends JFrame {
             return;
         }
 
-        String sql = """
-    WITH ins AS (
-        INSERT INTO grade (student_id, subject_id, score, date, comment)
-        VALUES (?, ?, ?, ?, ?)
-        RETURNING student_id, subject_id, score, comment, date
-    )
-    INSERT INTO grade_log (teacher_id, student_id, subject_id, score, comment, date_given)
-    SELECT ?, student_id, subject_id, score, comment, date FROM ins
-""";
+        String sql = "SELECT * FROM add_grade(?, ?, ?, ?, ?, ?)";
 
         try (PreparedStatement stmt = DatabaseManager.getConnection().prepareStatement(sql)) {
-            stmt.setInt(1, studentId);
-            stmt.setInt(2, subjectId);
-            stmt.setInt(3, score);
-            stmt.setDate(4, Date.valueOf(date));
-            stmt.setString(5, comment);
-            stmt.setInt(6, teacherId);
+            stmt.setInt(1, teacherId);
+            stmt.setInt(2, studentId);
+            stmt.setInt(3, subjectId);
+            stmt.setInt(4, score);
+            stmt.setDate(5, Date.valueOf(date));
+            stmt.setString(6, comment);
 
-            stmt.executeUpdate();
-            JOptionPane.showMessageDialog(this, "Grade added and logged successfully.");
-            scoreField.setText("");
-            commentField.setText("");
-            dateField.setText("");
-            loadStudentsAndGrades();
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                boolean success = rs.getBoolean("success");
+                String message = rs.getString("message");
+
+                JOptionPane.showMessageDialog(this, message);
+                if (success) {
+                    scoreField.setText("");
+                    commentField.setText("");
+                    dateField.setText("");
+                    loadStudentsAndGrades();
+                }
+            }
+
         } catch (SQLException e) {
-            JOptionPane.showMessageDialog(this, "Failed to insert grade.");
+            JOptionPane.showMessageDialog(this, "Database error occurred.");
             e.printStackTrace();
         }
-
-
     }
+
+
+
+
+
+
 
 
 }

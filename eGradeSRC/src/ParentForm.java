@@ -83,21 +83,9 @@ public class ParentForm extends JFrame {
     private Map<String, Map<String, List<GradeItem>>> fetchAllStudentGrades(int parentId) {
         Map<String, Map<String, List<GradeItem>>> studentData = new LinkedHashMap<>();
 
-        String query = """
-            SELECT u.id as student_id, u.first_name || ' ' || u.last_name AS student_name,
-                   s.name AS subject, g.score, g.comment
-            FROM parent_student ps
-            JOIN "user" u ON u.id = ps.student_id
-            JOIN student_class sc ON sc.student_id = u.id
-            JOIN class c ON c.id = sc.class_id
-            JOIN grade_level_subject gls ON gls.grade_level_id = c.grade_level_id
-            JOIN subject s ON s.id = gls.subject_id
-            LEFT JOIN grade g ON g.student_id = u.id AND g.subject_id = s.id
-            WHERE ps.parent_id = ?
-            ORDER BY student_name, s.name
-        """;
+        String sql = "SELECT * FROM get_grades_for_parent(?)";
 
-        try (PreparedStatement stmt = DatabaseManager.getConnection().prepareStatement(query)) {
+        try (PreparedStatement stmt = DatabaseManager.getConnection().prepareStatement(sql)) {
             stmt.setInt(1, parentId);
             ResultSet rs = stmt.executeQuery();
 
@@ -111,7 +99,8 @@ public class ParentForm extends JFrame {
                 Map<String, List<GradeItem>> subjects = studentData.get(studentName);
                 subjects.computeIfAbsent(subject, k -> new ArrayList<>());
 
-                if (score != 0) {
+                // Add grade only if it exists
+                if (!rs.wasNull()) {
                     subjects.get(subject).add(new GradeItem(score, comment));
                 }
             }
@@ -123,14 +112,9 @@ public class ParentForm extends JFrame {
         return studentData;
     }
 
+
     private String fetchTeacherForSubject(String subjectName) {
-        String query = """
-            SELECT u.first_name || ' ' || u.last_name AS full_name
-            FROM teacher_subject ts
-            JOIN subject s ON s.id = ts.subject_id
-            JOIN "user" u ON u.id = ts.teacher_id
-            WHERE s.name ILIKE ? LIMIT 1
-        """;
+        String query = "SELECT get_teacher_for_subject(?) AS full_name";
 
         try (PreparedStatement stmt = DatabaseManager.getConnection().prepareStatement(query)) {
             stmt.setString(1, subjectName);
@@ -143,6 +127,7 @@ public class ParentForm extends JFrame {
         }
         return "Unknown";
     }
+
 
     private JPanel createSubjectCard(String subjectName, String teacherName, List<GradeItem> grades, double avg) {
         JPanel card = new JPanel(new BorderLayout());
