@@ -1,0 +1,367 @@
+create function validate_login(p_email text, p_password text)
+    returns TABLE(user_id integer, user_type text)
+    language plpgsql
+as
+$$
+BEGIN
+    RETURN QUERY
+    SELECT u.id, ut.type_name::TEXT 
+    FROM "user" u
+    JOIN user_type ut ON ut.id = u.user_type_id
+    WHERE u.email = p_email
+      AND u.password = crypt(p_password, u.password);  -- ✅ bcrypt verification
+END;
+$$;
+
+----------------------
+
+create function update_user(user_id integer, fn text, ln text, email text, phone text, type_id integer, city_id integer)
+    returns TABLE(success boolean, message text)
+    language plpgsql
+as
+$$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM "user" u WHERE u.id = update_user.user_id) THEN
+        RETURN QUERY SELECT false, 'User not found';
+        RETURN;
+    END IF;
+
+    UPDATE "user" u
+    SET first_name = fn,
+        last_name = ln,
+        email = update_user.email,
+        phone = update_user.phone,
+        user_type_id = update_user.type_id,
+        city_id = update_user.city_id
+    WHERE u.id = update_user.user_id;
+
+    RETURN QUERY SELECT true, 'User updated';
+END;
+$$;
+
+
+----------------------
+
+TRIGGER
+
+create function hash_user_password() returns trigger
+    language plpgsql
+as
+$$
+BEGIN
+    
+    IF NEW.password IS NOT NULL AND NEW.password NOT LIKE '$2a$%' THEN
+        NEW.password := crypt(NEW.password, gen_salt('bf'));
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trigger_hash_user_password ON "user";
+
+CREATE TRIGGER trigger_hash_user_password
+BEFORE INSERT OR UPDATE ON "user"
+FOR EACH ROW
+EXECUTE FUNCTION hash_user_password();
+
+
+----------------------
+
+create function get_teacher_subjects(p_teacher_id integer)
+    returns TABLE(id integer, name text)
+    language plpgsql
+as
+$$
+BEGIN
+    RETURN QUERY
+    SELECT
+        s.id,
+        s.name::TEXT
+    FROM subject s
+    JOIN teacher_subject ts ON s.id = ts.subject_id
+    WHERE ts.teacher_id = p_teacher_id;
+END;
+$$;
+
+----------------------
+
+create function get_teacher_for_subject(subject_name text) returns text
+    language plpgsql
+as
+$$
+DECLARE
+    full_name TEXT;
+BEGIN
+    SELECT u.first_name || ' ' || u.last_name
+    INTO full_name
+    FROM teacher_subject ts
+    JOIN subject s ON s.id = ts.subject_id
+    JOIN "user" u ON u.id = ts.teacher_id
+    WHERE s.name ILIKE subject_name
+    LIMIT 1;
+
+    RETURN COALESCE(full_name, 'Unknown');
+END;
+$$;
+
+----------------------
+
+create function get_teacher_by_subject_name(p_subject_name text) returns text
+    language plpgsql
+as
+$$
+DECLARE
+    teacher_name TEXT;
+BEGIN
+    SELECT u.first_name || ' ' || u.last_name
+    INTO teacher_name
+    FROM teacher_subject ts
+    JOIN subject s ON s.id = ts.subject_id
+    JOIN "user" u ON u.id = ts.teacher_id
+    WHERE s.name ILIKE p_subject_name
+    LIMIT 1;
+
+    RETURN COALESCE(teacher_name, 'Unknown');
+END;
+$$;
+
+
+----------------------
+
+create function get_students_with_grades(subject_id integer)
+    returns TABLE(student_id integer, full_name text, grade_count integer, avg_grade numeric)
+    language plpgsql
+as
+$$
+BEGIN
+    RETURN QUERY
+    SELECT
+        u.id,
+        u.first_name || ' ' || u.last_name AS full_name,
+        COUNT(g.id)::INT,
+        COALESCE(ROUND(AVG(g.score), 2), 0)
+    FROM student_subject ss
+    JOIN "user" u ON ss.student_id = u.id
+    LEFT JOIN grade g ON g.student_id = u.id AND g.subject_id = get_students_with_grades.subject_id
+    WHERE ss.subject_id = get_students_with_grades.subject_id
+    GROUP BY u.id
+    ORDER BY full_name;
+END;
+$$;
+
+
+----------------------
+
+create function get_students_and_grades_by_subject(p_subject_id integer)
+    returns TABLE(student_id integer, student_name text, grade_count integer, avg_grade numeric)
+    language plpgsql
+as
+$$
+BEGIN
+    RETURN QUERY
+    SELECT u.id,
+           u.first_name || ' ' || u.last_name,
+           COUNT(g.id),
+           COALESCE(ROUND(AVG(g.score), 2), 0)
+    FROM student_subject ss
+    JOIN "user" u ON ss.student_id = u.id
+    LEFT JOIN grade g ON g.student_id = u.id AND g.subject_id = p_subject_id
+    WHERE ss.subject_id = p_subject_id
+    GROUP BY u.id
+    ORDER BY student_name;
+END;
+$$;
+
+----------------------
+
+create function get_student_subject_grades_by_parent(p_parent_id integer)
+    returns TABLE(student_name text, subject_name text, score numeric, comment text)
+    language plpgsql
+as
+$$
+BEGIN
+    RETURN QUERY
+    SELECT
+        (u.first_name || ' ' || u.last_name)::TEXT AS student_name,
+        s.name::TEXT AS subject_name,
+        g.score,
+        g.comment::TEXT
+    FROM parent_student ps
+    JOIN "user" u ON u.id = ps.student_id
+    JOIN student_class sc ON sc.student_id = u.id
+    JOIN class c ON c.id = sc.class_id
+    JOIN grade_level_subject gls ON gls.grade_level_id = c.grade_level_id
+    JOIN subject s ON s.id = gls.subject_id
+    LEFT JOIN grade g ON g.student_id = u.id AND g.subject_id = s.id
+    WHERE ps.parent_id = p_parent_id
+    ORDER BY student_name, s.name;
+END;
+$$;
+
+
+----------------------
+
+create function get_grade_log()
+    returns TABLE(teacher text, student text, subject text, score numeric, comment text, date_given date, logged_at timestamp without time zone)
+    language plpgsql
+as
+$$
+BEGIN
+    RETURN QUERY
+    SELECT
+        (t.first_name || ' ' || t.last_name)::TEXT,
+        (s.first_name || ' ' || s.last_name)::TEXT,
+        subj.name::TEXT,
+        gl.score,
+        gl.comment::TEXT,
+        gl.date_given,
+        gl.timestamp
+    FROM grade_log gl
+    JOIN "user" t ON gl.teacher_id = t.id
+    JOIN "user" s ON gl.student_id = s.id
+    JOIN subject subj ON gl.subject_id = subj.id
+    ORDER BY gl.timestamp DESC;
+END;
+$$;
+
+alter function get_grade_log() owner to avnadmin;
+
+
+
+----------------------
+
+
+create function create_parent(fn text, ln text, email text, password text, phone text, city_id integer, student_id integer)
+    returns TABLE(success boolean, message text, id integer)
+    language plpgsql
+as
+$$
+DECLARE
+    parent_id INT;
+BEGIN
+   
+    IF EXISTS (SELECT 1 FROM "user" u WHERE u.email = create_parent.email) THEN
+        RETURN QUERY SELECT false, 'Email already exists', NULL;
+        RETURN;
+    END IF;
+
+  
+    INSERT INTO "user" (first_name, last_name, email, password, phone, user_type_id, city_id)
+    VALUES (fn, ln, create_parent.email, password, phone, 1, city_id)
+    RETURNING "user".id INTO parent_id; -- FIXED here
+
+    
+    INSERT INTO parent_student (parent_id, student_id)
+    VALUES (parent_id, student_id);
+
+    RETURN QUERY SELECT true, 'Parent created and linked', parent_id;
+END;
+$$;
+
+----------------------
+
+create function create_student(fn text, ln text, email text, password text, phone text, city_id integer, grade_level_id integer)
+    returns TABLE(success boolean, message text, id integer)
+    language plpgsql
+as
+$$
+DECLARE
+    student_id INT;
+BEGIN
+   
+    IF EXISTS (SELECT 1 FROM "user" u WHERE u.email = create_student.email) THEN
+        RETURN QUERY SELECT false, 'Email already exists', NULL;
+        RETURN;
+    END IF;
+
+   
+    INSERT INTO "user" (first_name, last_name, email, password, phone, user_type_id, city_id)
+    VALUES (fn, ln, create_student.email, password, phone, 2, city_id)
+    RETURNING "user".id INTO student_id;
+
+    
+    INSERT INTO student_class (student_id, class_id)
+    SELECT student_id, c.id
+    FROM class c
+    WHERE c.grade_level_id = create_student.grade_level_id;
+
+   
+    INSERT INTO student_subject (student_id, subject_id)
+    SELECT student_id, gls.subject_id
+    FROM grade_level_subject gls
+    WHERE gls.grade_level_id = create_student.grade_level_id;
+
+    RETURN QUERY SELECT true, 'Student created successfully', student_id;
+END;
+$$;
+
+----------------------
+
+
+create function create_teacher(p_fn text, p_ln text, p_email text, p_password text, p_phone text, p_city_id integer, p_subject_id integer)
+    returns TABLE(success boolean, message text, id integer)
+    language plpgsql
+as
+$$
+DECLARE
+    teacher_id INT;
+BEGIN
+    
+    IF EXISTS (SELECT 1 FROM "user" WHERE email = p_email) THEN
+        RETURN QUERY SELECT false, 'Email already exists', NULL;
+        RETURN;
+    END IF;
+
+    
+    INSERT INTO "user" (first_name, last_name, email, password, phone, user_type_id, city_id)
+    VALUES (p_fn, p_ln, p_email, p_password, p_phone, 3, p_city_id)
+    RETURNING "user".id INTO teacher_id;
+
+    
+    INSERT INTO teacher_subject (teacher_id, subject_id)
+    VALUES (teacher_id, p_subject_id);
+
+    RETURN QUERY SELECT true, 'Teacher created successfully', teacher_id;
+END;
+$$;
+
+
+----------------------
+
+create function add_grade(p_teacher_id integer, p_student_id integer, p_subject_id integer, p_score integer, p_date date, p_comment text)
+    returns TABLE(success boolean, message text)
+    language plpgsql
+as
+$$
+BEGIN
+    -- za grade
+    INSERT INTO grade (student_id, subject_id, score, date, comment)
+    VALUES (p_student_id, p_subject_id, p_score, p_date, p_comment);
+
+    -- za logs
+    INSERT INTO grade_log (teacher_id, student_id, subject_id, score, comment, date_given)
+    VALUES (p_teacher_id, p_student_id, p_subject_id, p_score, p_comment, p_date);
+
+    RETURN QUERY SELECT true, 'Grade inserted and logged';
+EXCEPTION WHEN OTHERS THEN
+    RETURN QUERY SELECT false, 'Insertion failed: ' || SQLERRM;
+END;
+$$;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
